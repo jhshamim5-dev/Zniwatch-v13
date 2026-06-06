@@ -72,7 +72,7 @@ const VideoPlayer = () => {
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState<number>(0);
   const [servers, setServers] = useState<StreamServer[]>([]);
-  const [currentServer, setCurrentServer] = useState('hd-1');
+  const [currentServer, setCurrentServer] = useState('hd-2');
   const [streamData, setStreamData] = useState<StreamData | null>(null);
   const [subtitles, setSubtitles] = useState<StreamTrack[]>([]);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
