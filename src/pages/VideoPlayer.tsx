@@ -72,16 +72,15 @@ const VideoPlayer = () => {
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState<number>(0);
   const [servers, setServers] = useState<StreamServer[]>([]);
-  const [currentServer, setCurrentServer] = useState('hd-2');
+  const [currentServer, setCurrentServer] = useState('hd-3');
   const [streamData, setStreamData] = useState<StreamData | null>(null);
   const [subtitles, setSubtitles] = useState<StreamTrack[]>([]);
   const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
   const [currentAudioType, setCurrentAudioType] = useState<'sub' | 'dub'>(audioType);
-  const [hasDub, setHasDub] = useState(false);
   const [introOutro, setIntroOutro] = useState<{ intro?: { start: number; end: number }; outro?: { start: number; end: number } }>({});
-    const introOutroRef = useRef<{ intro?: { start: number; end: number }; outro?: { start: number; end: number } }>({});
+  const introOutroRef = useRef<{ intro?: { start: number; end: number }; outro?: { start: number; end: number } }>({});
     const [showSkipIntro, setShowSkipIntro] = useState(false);
     const [showSkipOutro, setShowSkipOutro] = useState(false);
     const isTouchRef = useRef(false);
@@ -104,6 +103,7 @@ const VideoPlayer = () => {
 
   const epId = searchParams.get('epId');
   const episode = parseInt(searchParams.get('ep') || '1', 10);
+  const hasDub = anime ? episode <= (anime.dubCount || 0) : false;
 
   const totalEpisodes = episodesData?.totalEpisodes || anime?.episodes || 12;
   const hasNextEpisode = episode < totalEpisodes;
@@ -355,27 +355,29 @@ const VideoPlayer = () => {
     setIsLoading(true);
     setError(null);
 
-    try {
-      const streamUrl = `${API_BASE}/api/stream?id=${id}&ep=${epId}&server=${server}&type=${type}`;
-      const res = await fetch(streamUrl);
-      const json = await res.json();
+    const serversToTry = [server, ...['hd-1', 'hd-2', 'hd-3'].filter(s => s !== server)];
 
-      if (!json.success || !json.data?.m3u8) {
-        throw new Error('Failed to fetch stream');
-      }
+    for (const srv of serversToTry) {
+      try {
+        const streamUrl = `${API_BASE}/api/stream?id=${id}&ep=${epId}&server=${srv}&type=${type}`;
+        const res = await fetch(streamUrl);
+        const json = await res.json();
 
-      setStreamData(json.data);
-      const fakeServers = [
-        { type: 'sub', data_id: 'hd-1', server_id: 'hd-1', serverName: 'HD-1' },
-        { type: 'sub', data_id: 'hd-2', server_id: 'hd-2', serverName: 'HD-2' },
-        { type: 'sub', data_id: 'hd-3', server_id: 'hd-3', serverName: 'HD-3' },
-        { type: 'dub', data_id: 'hd-1', server_id: 'hd-1', serverName: 'HD-1' },
-        { type: 'dub', data_id: 'hd-2', server_id: 'hd-2', serverName: 'HD-2' },
-        { type: 'dub', data_id: 'hd-3', server_id: 'hd-3', serverName: 'HD-3' }
-      ];
-      setServers(fakeServers);
-      setHasDub(true);
-      setSubtitles(json.data.subtitles || []);
+        if (!json.success || !json.data?.m3u8) {
+          throw new Error(`Failed to fetch stream from ${srv}`);
+        }
+
+        setStreamData(json.data);
+        const fakeServers = [
+          { type: 'sub', data_id: 'hd-1', server_id: 'hd-1', serverName: 'HD-1' },
+          { type: 'sub', data_id: 'hd-2', server_id: 'hd-2', serverName: 'HD-2' },
+          { type: 'sub', data_id: 'hd-3', server_id: 'hd-3', serverName: 'HD-3' },
+          { type: 'dub', data_id: 'hd-1', server_id: 'hd-1', serverName: 'HD-1' },
+          { type: 'dub', data_id: 'hd-2', server_id: 'hd-2', serverName: 'HD-2' },
+          { type: 'dub', data_id: 'hd-3', server_id: 'hd-3', serverName: 'HD-3' }
+        ];
+        setServers(fakeServers);
+        setSubtitles(json.data.subtitles || []);
         const io = {
           intro: json.data.intro,
           outro: json.data.outro,
@@ -383,12 +385,15 @@ const VideoPlayer = () => {
         setIntroOutro(io);
         introOutroRef.current = io;
 
-      return json.data;
-    } catch (err) {
-      setError('Failed to load stream. Try another server.');
-      setIsLoading(false);
-      return null;
+        return { data: json.data, successfulServer: srv };
+      } catch (err) {
+        console.warn(`Server ${srv} failed, trying next...`, err);
+      }
     }
+
+    setError('Failed to load stream. All servers failed.');
+    setIsLoading(false);
+    return null;
   }, [epId, id]);
 
   const getProxiedUrl = (targetUrl: string) => {
@@ -403,8 +408,14 @@ const VideoPlayer = () => {
     const initPlayer = async () => {
       const result = await fetchStream(currentServer, currentAudioType);
       if (!result || !mounted) return;
-      const streamUrl = result.m3u8;
-      const tracks: StreamTrack[] = result.subtitles || [];
+      
+      if (result.successfulServer !== currentServer) {
+        setCurrentServer(result.successfulServer);
+        return;
+      }
+
+      const streamUrl = result.data.m3u8;
+      const tracks: StreamTrack[] = result.data.subtitles || [];
       const defaultSub = tracks.find(t => t.kind === 'captions' && t.default) || tracks.find(t => t.kind === 'captions');
         if (defaultSub) {
           setCurrentSubtitle(defaultSub.label);
