@@ -60,6 +60,7 @@ const VideoPlayer = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [qualityLevels, setQualityLevels] = useState<{ height: number; index: number }[]>([]);
   const [currentQuality, setCurrentQuality] = useState(-1);
+  const [selectedQuality, setSelectedQuality] = useState(-1);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [showServerMenu, setShowServerMenu] = useState(false);
   const [showSubtitleSizeMenu, setShowSubtitleSizeMenu] = useState(false);
@@ -492,8 +493,8 @@ const VideoPlayer = () => {
                         startLevel: -1,
                         autoStartLoad: true,
                         backBufferLength: 10,
-                        // ABR — start with high estimate so it picks good quality fast
-                        abrEwmaDefaultEstimate: 8000000,
+                        // ABR — start with a reasonable initial estimate so it plays smoothly on slow/low networks
+                        abrEwmaDefaultEstimate: 1200000,
                         abrEwmaFastLive: 5,
                         abrEwmaSlowLive: 10,
                         abrEwmaFastVoD: 5,
@@ -525,16 +526,6 @@ const VideoPlayer = () => {
                     index,
                   }));
                   setQualityLevels(levels);
-
-                  const target1080 = levels.find(l => l.height === 1080);
-                  if (target1080) {
-                    hls.currentLevel = target1080.index;
-                    setCurrentQuality(target1080.index);
-                  } else if (levels.length > 0) {
-                    const highest = levels.reduce((a, b) => a.height > b.height ? a : b);
-                    hls.currentLevel = highest.index;
-                    setCurrentQuality(highest.index);
-                  }
                 });
 
                 hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
@@ -807,6 +798,7 @@ const VideoPlayer = () => {
   }, [episode, id, audioType, navigate, episodesData]);
 
   const setQuality = (levelIndex: number) => {
+    setSelectedQuality(levelIndex);
     if (hlsInstanceRef.current) {
       hlsInstanceRef.current.currentLevel = levelIndex;
     }
@@ -1108,21 +1100,21 @@ const VideoPlayer = () => {
                     <div className="px-3 py-2 text-xs text-gray-400 border-b border-white/10 uppercase tracking-wider font-bold">Quality</div>
                     <button
                       onClick={(e) => { e.stopPropagation(); setQuality(-1); }}
-                      className={`w-full px-4 py-2.5 text-left text-sm hover:bg-white/10 transition-colors ${currentQuality === -1 ? 'text-primary bg-white/5' : ''}`}
+                      className={`w-full px-4 py-2.5 text-left text-sm hover:bg-white/10 transition-colors ${selectedQuality === -1 ? 'text-primary bg-white/5' : ''}`}
                     >
-                      Auto
+                      Auto {currentQuality !== -1 && qualityLevels[currentQuality] ? `(${qualityLevels[currentQuality].height}p)` : ''}
                     </button>
                     {qualityLevels.map((level) => (
                       <button
                         key={level.index}
                         onClick={(e) => { e.stopPropagation(); setQuality(level.index); }}
-                        className={`w-full px-4 py-2.5 text-left text-sm hover:bg-white/10 transition-colors ${currentQuality === level.index ? 'text-primary bg-white/5' : ''}`}
+                        className={`w-full px-4 py-2.5 text-left text-sm hover:bg-white/10 transition-colors ${selectedQuality === level.index ? 'text-primary bg-white/5' : ''}`}
                       >
                         {level.height}p
                       </button>
                     ))}
                   </div>
-                  )}
+                )}
                 </div>
 
               <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className="w-10 h-10 rounded-full bg-black/20 flex items-center justify-center hover:bg-white/10 transition-colors">
