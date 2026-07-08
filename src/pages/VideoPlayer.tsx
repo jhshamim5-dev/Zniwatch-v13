@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Maximize, Minimize, AlertCircle, SkipForward, Play, Pause, Volume2, VolumeX, Settings, Server, Captions, CaptionsOff, RotateCcw, RotateCw, Type, Languages } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { useAnimeDetails, useAnimeEpisodes } from '@/hooks/useAnime';
 import { useWatchHistory } from '@/hooks/useWatchHistory';
 import { WatchHistoryEntry } from '@/lib/db';
@@ -10,7 +11,6 @@ import Artplayer from 'artplayer';
 import Hls from 'hls.js';
 
 const API_BASE = 'https://anikoto-api.vercel.app';
-const CORS_PROXY = 'https://m3u8-proxy-v1.jahinalamshamim.workers.dev/proxy?url=';
 
 const SUBTITLE_SIZES = [50, 75, 100, 125, 150, 175, 200];
 const ASPECT_RATIOS = ['Default', '16:9', '4:3', '2.35:1', 'Full'];
@@ -393,8 +393,12 @@ const VideoPlayer = () => {
     return null;
   }, [epId, id]);
 
-  const getProxiedUrl = (targetUrl: string) => {
-    return CORS_PROXY + encodeURIComponent(targetUrl);
+  const getProxiedUrl = (targetUrl: string, referer?: string) => {
+    let url = `/api/stream?url=${encodeURIComponent(targetUrl)}`;
+    if (referer) {
+      url += `&referer=${encodeURIComponent(referer)}&origin=${encodeURIComponent(referer.replace(/\/$/, ''))}`;
+    }
+    return url;
   };
 
   useEffect(() => {
@@ -429,9 +433,13 @@ const VideoPlayer = () => {
         hlsInstanceRef.current = null;
       }
 
+      const isNative = Capacitor.isNativePlatform();
+      const finalStreamUrl = isNative ? streamUrl : getProxiedUrl(streamUrl, result.data.referer);
+      const finalSubUrl = defaultSub ? (isNative ? defaultSub.file : getProxiedUrl(defaultSub.file, result.data.referer)) : '';
+
       const art = new Artplayer({
         container: playerContainerRef.current!,
-        url: streamUrl,
+        url: finalStreamUrl,
         type: 'm3u8',
         volume: volume,
         muted: isMuted,
@@ -458,7 +466,7 @@ const VideoPlayer = () => {
           cssVar: {},
             ...(defaultSub ? {
                   subtitle: {
-                    url: getProxiedUrl(defaultSub.file),
+                    url: finalSubUrl,
                     type: 'vtt',
                     encoding: 'utf-8',
                     escape: false,
@@ -472,11 +480,21 @@ const VideoPlayer = () => {
         customType: {
           m3u8: function (video: HTMLVideoElement, url: string) {
                 if (Hls.isSupported()) {
-                  let proxiedUrl = getProxiedUrl(url);
-
                     const hls = new Hls({
                         enableWorker: true,
                         lowLatencyMode: false,
+                        xhrSetup: function(xhr: XMLHttpRequest) {
+                          if (result?.data?.referer) {
+                            const ref = result.data.referer;
+                            const orig = ref.endsWith('/') ? ref.slice(0, -1) : ref;
+                            try {
+                              xhr.setRequestHeader('Referer', ref);
+                              xhr.setRequestHeader('Origin', orig);
+                            } catch (e) {
+                              // Browser may prevent setting unsafe headers, but safe to ignore as it works on Native Capacitor
+                            }
+                          }
+                        },
                         // Start playback quickly with small initial buffer
                         maxBufferLength: 30,
                         maxMaxBufferLength: 60,
@@ -508,17 +526,10 @@ const VideoPlayer = () => {
                         manifestLoadingRetryDelay: 200,
                         startFragPrefetch: true,
                         progressive: true,
-                    xhrSetup: (xhr: XMLHttpRequest, xhrUrl: string) => {
-                      let finalUrl = xhrUrl;
-                      if (!finalUrl.startsWith(CORS_PROXY)) {
-                          finalUrl = getProxiedUrl(xhrUrl);
-                      }
-                      xhr.open('GET', finalUrl, true);
-                    },
-                  });
+                    });
 
                   hlsInstanceRef.current = hls;
-                  hls.loadSource(proxiedUrl);
+                  hls.loadSource(url);
                 hls.attachMedia(video);
 
                 hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
@@ -850,7 +861,8 @@ const VideoPlayer = () => {
         if (track) {
           setCurrentSubtitle(track.label);
           if (art.subtitle) {
-            art.subtitle.url = getProxiedUrl(track.file);
+            const isNative = Capacitor.isNativePlatform();
+            art.subtitle.url = isNative ? track.file : getProxiedUrl(track.file, streamData?.referer || '');
             art.subtitle.show = true;
           }
         } else {
@@ -859,7 +871,9 @@ const VideoPlayer = () => {
             art.subtitle.show = false;
           }
         }
-      } catch {}
+      } catch (err) {
+        console.error(err);
+      }
       setShowSubtitleMenu(false);
     };
 
