@@ -67,10 +67,19 @@ app.get('/api/stream', async (req, res) => {
               absoluteUrl = baseUrl + absoluteUrl;
             }
           }
-          let newUrl = `/api/stream?url=${encodeURIComponent(absoluteUrl)}`;
-          if (referer) newUrl += `&referer=${encodeURIComponent(referer)}`;
-          if (origin) newUrl += `&origin=${encodeURIComponent(origin)}`;
-          return newUrl;
+
+          const lowerSeg = absoluteUrl.toLowerCase();
+          // DO NOT proxy heavy media segments (.ts, .mp4, .m4s, .m2ts). Fetching directly from CDN lowers latency and buffering!
+          const shouldProxySegment = lowerSeg.includes('.m3u8') || (!lowerSeg.includes('.ts') && !lowerSeg.includes('.mp4') && !lowerSeg.includes('.m4s') && !lowerSeg.includes('.m2ts'));
+
+          if (shouldProxySegment) {
+            let newUrl = `/api/stream?url=${encodeURIComponent(absoluteUrl)}`;
+            if (referer) newUrl += `&referer=${encodeURIComponent(referer)}`;
+            if (origin) newUrl += `&origin=${encodeURIComponent(origin)}`;
+            return newUrl;
+          } else {
+            return absoluteUrl;
+          }
         }
 
         // Handle URI attribute in lines like #EXT-X-KEY, #EXT-X-MAP
@@ -84,10 +93,18 @@ app.get('/api/stream', async (req, res) => {
                 absoluteUri = baseUrl + absoluteUri;
               }
             }
-            let newUri = `/api/stream?url=${encodeURIComponent(absoluteUri)}`;
-            if (referer) newUri += `&referer=${encodeURIComponent(referer)}`;
-            if (origin) newUri += `&origin=${encodeURIComponent(origin)}`;
-            return `URI="${newUri}"`;
+
+            const lowerUri = absoluteUri.toLowerCase();
+            const shouldProxyUri = lowerUri.includes('.m3u8') || (!lowerUri.includes('.ts') && !lowerUri.includes('.mp4') && !lowerUri.includes('.m4s') && !lowerUri.includes('.m2ts'));
+
+            if (shouldProxyUri) {
+              let newUri = `/api/stream?url=${encodeURIComponent(absoluteUri)}`;
+              if (referer) newUri += `&referer=${encodeURIComponent(referer)}`;
+              if (origin) newUri += `&origin=${encodeURIComponent(origin)}`;
+              return `URI="${newUri}"`;
+            } else {
+              return `URI="${absoluteUri}"`;
+            }
           });
         }
 
