@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Maximize, Minimize, AlertCircle, SkipForward, Play, Pause, Volume2, VolumeX, Settings, Server, Captions, CaptionsOff, RotateCcw, RotateCw, Type, Languages } from 'lucide-react';
-import { Capacitor } from '@capacitor/core';
 import { useAnimeDetails, useAnimeEpisodes } from '@/hooks/useAnime';
 import { useWatchHistory } from '@/hooks/useWatchHistory';
 import { WatchHistoryEntry } from '@/lib/db';
@@ -433,7 +432,7 @@ const VideoPlayer = () => {
         hlsInstanceRef.current = null;
       }
 
-      const isNative = Capacitor.isNativePlatform();
+      const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
       const finalStreamUrl = isNative ? streamUrl : getProxiedUrl(streamUrl, result.data.referer);
       const finalSubUrl = defaultSub ? (isNative ? defaultSub.file : getProxiedUrl(defaultSub.file, result.data.referer)) : '';
 
@@ -861,7 +860,7 @@ const VideoPlayer = () => {
         if (track) {
           setCurrentSubtitle(track.label);
           if (art.subtitle) {
-            const isNative = Capacitor.isNativePlatform();
+            const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
             art.subtitle.url = isNative ? track.file : getProxiedUrl(track.file, streamData?.referer || '');
             art.subtitle.show = true;
           }
