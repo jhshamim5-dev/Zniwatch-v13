@@ -482,10 +482,10 @@ const VideoPlayer = () => {
                     const hls = new Hls({
                         enableWorker: true,
                         lowLatencyMode: false,
-                        // Start playback quickly with small initial buffer
-                        maxBufferLength: 30,
-                        maxMaxBufferLength: 60,
-                        maxBufferSize: 60 * 1000 * 1000,
+                        // Start playback quickly with larger buffer capacity for smooth 1080p streaming
+                        maxBufferLength: 90,
+                        maxMaxBufferLength: 180,
+                        maxBufferSize: 120 * 1024 * 1024,
                         maxBufferHole: 0.3,
                         highBufferWatchdogPeriod: 3,
                         nudgeOffset: 0.2,
@@ -526,6 +526,18 @@ const VideoPlayer = () => {
                     index,
                   }));
                   setQualityLevels(levels);
+
+                  const target1080 = levels.find(l => l.height === 1080);
+                  if (target1080) {
+                    hls.currentLevel = target1080.index;
+                    setSelectedQuality(target1080.index);
+                    setCurrentQuality(target1080.index);
+                  } else if (levels.length > 0) {
+                    const highest = levels.reduce((a, b) => a.height > b.height ? a : b);
+                    hls.currentLevel = highest.index;
+                    setSelectedQuality(highest.index);
+                    setCurrentQuality(highest.index);
+                  }
                 });
 
                 hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
