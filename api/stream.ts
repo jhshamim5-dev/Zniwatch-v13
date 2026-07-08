@@ -127,7 +127,13 @@ export default async function fetchHandler(request: Request) {
              }
            }
            
-           let newUrl = proxySelfUrl + encodeURIComponent(absoluteSegmentUrl);
+           let newUrl = "";
+            const lowerSeg = absoluteSegmentUrl.toLowerCase();
+            const shouldProxySegment = lowerSeg.includes('.m3u8') || (!lowerSeg.includes('.ts') && !lowerSeg.includes('.mp4') && !lowerSeg.includes('.m4s') && !lowerSeg.includes('.m2ts'));
+            if (!shouldProxySegment) {
+              return absoluteSegmentUrl;
+            }
+            newUrl = proxySelfUrl + encodeURIComponent(absoluteSegmentUrl);
            if (headers['Referer']) newUrl += `&referer=${encodeURIComponent(headers['Referer'])}`;
            if (headers['Origin']) newUrl += `&origin=${encodeURIComponent(headers['Origin'])}`;
            
@@ -144,7 +150,13 @@ export default async function fetchHandler(request: Request) {
                   absoluteUri = baseUrl + absoluteUri;
                }
              }
-             let newUri = proxySelfUrl + encodeURIComponent(absoluteUri);
+             let newUri = "";
+              const lowerUri = absoluteUri.toLowerCase();
+              const shouldProxyUri = lowerUri.includes('.m3u8') || (!lowerUri.includes('.ts') && !lowerUri.includes('.mp4') && !lowerUri.includes('.m4s') && !lowerUri.includes('.m2ts'));
+              if (!shouldProxyUri) {
+                return `URI="${absoluteUri}"`;
+              }
+              newUri = proxySelfUrl + encodeURIComponent(absoluteUri);
              if (headers['Referer']) newUri += `&referer=${encodeURIComponent(headers['Referer'])}`;
              if (headers['Origin']) newUri += `&origin=${encodeURIComponent(headers['Origin'])}`;
              
