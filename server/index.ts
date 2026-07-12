@@ -1,13 +1,13 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { Readable } from 'stream';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
-// Simple direct route to fetch resources with custom headers to bypass browser restriction
-app.get('/api/stream', async (req, res) => {
+const handleProxy = async (req: express.Request, res: express.Response) => {
   const targetUrl = req.query.url as string;
   const referer = req.query.referer as string;
   const origin = req.query.origin as string;
@@ -69,10 +69,10 @@ app.get('/api/stream', async (req, res) => {
     const isM3U8 = targetUrl.includes('.m3u8') || (contentType && contentType.includes('mpegurl'));
     if (isM3U8) {
       const text = await response.text();
-      const targetUrlObj = new URL(targetUrl);
       const baseUrl = targetUrlObj.origin + targetUrlObj.pathname.substring(0, targetUrlObj.pathname.lastIndexOf('/') + 1);
       
-      let proxySelfUrl = `/api/stream?url=`;
+      const currentPath = req.path;
+      let proxySelfUrl = `${currentPath}?url=`;
       const cfProxy = process.env.CLOUDFLARE_PROXY_URL;
       if (cfProxy) {
         proxySelfUrl = cfProxy.includes('?') ? `${cfProxy}&url=` : `${cfProxy}?url=`;
@@ -126,13 +126,22 @@ app.get('/api/stream', async (req, res) => {
     }
 
     // Otherwise, stream the raw response (TS segment / Subtitle / Key)
-    const arrayBuffer = await response.arrayBuffer();
-    return res.send(Buffer.from(arrayBuffer));
+    if (response.body) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      Readable.fromWeb(response.body as any).pipe(res);
+      return;
+    } else {
+      const arrayBuffer = await response.arrayBuffer();
+      return res.send(Buffer.from(arrayBuffer));
+    }
   } catch (error) {
     console.error('Stream error:', error);
     return res.status(500).send((error as Error).message);
   }
-});
+};
+
+app.get('/api/stream', handleProxy);
+app.get('/api/proxy', handleProxy);
 
 const distPath = path.resolve(__dirname, '../dist');
 app.use(express.static(distPath, { maxAge: '1y', immutable: true, index: false }));
