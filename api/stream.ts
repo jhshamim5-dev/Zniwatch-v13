@@ -67,6 +67,11 @@ export default async function fetchHandler(request: Request) {
        headers['Origin'] = headers['Origin'].replace(/\/$/, "");
     }
 
+    const reqRange = request.headers.get('range');
+    if (reqRange) {
+      headers['Range'] = reqRange;
+    }
+
     const response = await fetch(targetUrl, {
       headers,
       redirect: 'follow'
@@ -167,10 +172,36 @@ export default async function fetchHandler(request: Request) {
          headers: responseHeaders
        });
     } else {
-       // Just return the raw segment (TS file or keys)
+       // Just return the raw segment (TS file or keys) with range, length, and caching headers
+       const finalHeaders = new Headers(responseHeaders);
+       const contentLength = response.headers.get('content-length');
+       if (contentLength) {
+         finalHeaders.set('Content-Length', contentLength);
+       }
+       const contentRange = response.headers.get('content-range');
+       if (contentRange) {
+         finalHeaders.set('Content-Range', contentRange);
+       }
+       const acceptRanges = response.headers.get('accept-ranges');
+       if (acceptRanges) {
+         finalHeaders.set('Accept-Ranges', acceptRanges);
+       }
+
+       const isSegment = targetUrlObj.pathname.toLowerCase().endsWith('.ts') || 
+                         targetUrlObj.pathname.toLowerCase().endsWith('.mp4') || 
+                         targetUrlObj.pathname.toLowerCase().endsWith('.m4s') || 
+                         targetUrlObj.pathname.toLowerCase().endsWith('.m2ts') ||
+                         targetUrl.toLowerCase().includes('.ts') ||
+                         targetUrl.toLowerCase().includes('.mp4');
+       if (isSegment) {
+         finalHeaders.set('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable');
+       } else {
+         finalHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+       }
+
        return new Response(response.body, {
-         status: 200,
-         headers: responseHeaders
+         status: response.status,
+         headers: finalHeaders
        });
     }
 
